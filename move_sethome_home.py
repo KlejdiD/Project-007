@@ -1,7 +1,7 @@
 import serial
 import time
 
-
+#example commit 
 class Motor:
     """Represents a single motor and its operations."""
     def __init__(self, name, port, axis):
