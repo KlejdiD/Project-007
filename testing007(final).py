@@ -10,7 +10,7 @@ import os
 
 class Motor:
     """Represents a single motor and its operations."""
-    def __init__(self, name, port, axis, position_file="motor_positions.txt"):
+    def __init__(self, name, port, axis, position_file="motor_positions.json"):
         self.name = name
         self.port = port
         self.axis = axis
@@ -131,9 +131,9 @@ class MotorControlGUI(QMainWindow):
         self.graph = PlotWidget()
         self.graph.setLabel('left', 'Position')
         self.graph.setLabel('bottom', 'Motor')
+        self.graph.setYRange(0,20)
         self.graph.setXRange(0, 10)  # Default initial range
-        self.graph.setYRange(0, 100)  # Show up to y=100
-        self.graph.addLegend()
+        self.graph.setMouseEnabled(x=False, y=False)
         main_layout.addWidget(self.graph)
 
         # Buttons for operations
