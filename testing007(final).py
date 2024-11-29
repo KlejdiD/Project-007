@@ -121,13 +121,13 @@ class MotorControlGUI(QMainWindow):
         # Arduino and Motor Configuration
         config_layout = QHBoxLayout()
         self.arduino_count_input = QSpinBox()
-        self.arduino_count_input.setRange(1, 4)
+        self.arduino_count_input.setRange(1, 9000)
         self.arduino_count_input.setValue(4)
         config_layout.addWidget(QLabel("Number of Arduinos:"))
         config_layout.addWidget(self.arduino_count_input)
 
         self.motor_count_input = QSpinBox()
-        self.motor_count_input.setRange(1, 10)
+        self.motor_count_input.setRange(1, 9000)
         self.motor_count_input.setValue(10)
         config_layout.addWidget(QLabel("Number of Motors:"))
         config_layout.addWidget(self.motor_count_input)
@@ -189,23 +189,56 @@ class MotorControlGUI(QMainWindow):
             self.motor_inputs.append(input_box)
             self.motor_control_layout.addWidget(input_box, i, 1)
 
+    # def generate_motors(self):
+    #     """Generate motors based on input configuration."""
+    #     num_arduinos = self.arduino_count_input.value()
+    #     num_motors = self.motor_count_input.value()
+    #
+    #     self.controller.motors.clear()
+    #     motor_count = 0
+    #     for i in range(num_arduinos):
+    #         max_motors = 1 if i == 0 else 3
+    #         for j in range(min(max_motors, num_motors - motor_count)):
+    #             motor_name = f"Arduino {i+1} Motor {j+1}"
+    #             self.controller.add_motor(motor_name, f"COM{i+1}", "X")
+    #             motor_count += 1
+    #             if motor_count >= num_motors:
+    #                 break
+    #
+    #     self.update_motor_controls()
     def generate_motors(self):
         """Generate motors based on input configuration."""
         num_arduinos = self.arduino_count_input.value()
         num_motors = self.motor_count_input.value()
 
-        self.controller.motors.clear()
-        motor_count = 0
+        self.controller.motors.clear()  # Clear the current motors list
+        motor_count = 0  # Counter for assigned motors
+
+        # Check if motors can be evenly distributed among Arduinos
+        if num_motors % num_arduinos == 0:
+            motors_per_arduino = num_motors // num_arduinos
+        else:
+            motors_per_arduino = 3  # Default to 3 motors for all but the first Arduino
+
         for i in range(num_arduinos):
-            max_motors = 1 if i == 0 else 3
+            if i == 0 and num_motors % num_arduinos != 0:
+                # First Arduino takes the remainder if motors can't be evenly distributed
+                max_motors = num_motors % num_arduinos or 1
+            else:
+                # Remaining Arduinos take 3 motors (or equal share in case of divisibility)
+                max_motors = motors_per_arduino
+
+            # Assign motors to the current Arduino
             for j in range(min(max_motors, num_motors - motor_count)):
-                motor_name = f"Arduino {i+1} Motor {j+1}"
-                self.controller.add_motor(motor_name, f"COM{i+1}", "X")
+                motor_name = f"Arduino {i + 1} Motor {j + 1}"
+                self.controller.add_motor(motor_name, f"COM{i + 1}", "X")
                 motor_count += 1
+
+                # Stop when all motors are assigned
                 if motor_count >= num_motors:
                     break
 
-        self.update_motor_controls()
+        self.update_motor_controls()  # Update UI or motor controls
 
     def move_selected_motors(self):
         """Move selected motors."""
