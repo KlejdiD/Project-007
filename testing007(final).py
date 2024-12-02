@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 from pyqtgraph import PlotWidget
+import serial
 import os
 
 
@@ -15,7 +16,7 @@ class Motor:
         self.port = port
         self.axis = axis
         self.current_position = 0
-        self.max_position = 100  # Maximum position limit
+        self.max_position = 40  # Maximum position limit
         self.target_position = 0
         self.is_moving = False
         self.position_file = position_file
