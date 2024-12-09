@@ -5,15 +5,12 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 from pyqtgraph import PlotWidget
-import serial
 import os
-
 
 class Motor:
     """Represents a single motor and its operations."""
-    def __init__(self, name, port, axis, position_file="motor_positions.json"):
+    def __init__(self, name, axis, position_file="motor_positions.json"):
         self.name = name
-        self.port = port
         self.axis = axis
         self.current_position = 0
         self.max_position = 40  # Maximum position limit
@@ -71,14 +68,13 @@ class Motor:
                         self.target_position = self.current_position
                         print(f"{self.name} position loaded: {self.current_position}")
 
-
 class MotorController:
     """Manages multiple motors."""
     def __init__(self):
         self.motors = []
 
-    def add_motor(self, name, port, axis):
-        motor = Motor(name, port, axis)
+    def add_motor(self, name, axis):
+        motor = Motor(name, axis)
         self.motors.append(motor)
 
     def move_multiple_motors(self, motor_steps):
@@ -88,13 +84,11 @@ class MotorController:
             if motor:
                 motor.move(steps)
 
-
 class MotorControlGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.controller = MotorController()
         self.motor_positions = []  # Custom positions for motors on the graph
-        self.arduino_configs = []  # Stores number of motors for each Arduino
         self.initUI()
 
         self.update_timer = QTimer(self)
@@ -108,19 +102,6 @@ class MotorControlGUI(QMainWindow):
         central_widget = QWidget()
         main_layout = QVBoxLayout()
 
-        # Arduino Configuration
-        config_layout = QHBoxLayout()
-        self.arduino_count_input = QSpinBox()
-        self.arduino_count_input.setRange(1, 10)
-        config_layout.addWidget(QLabel("Number of Arduinos:"))
-        config_layout.addWidget(self.arduino_count_input)
-
-        set_arduinos_button = QPushButton("Set Arduinos")
-        set_arduinos_button.clicked.connect(self.set_arduino_configuration)
-        config_layout.addWidget(set_arduinos_button)
-
-        main_layout.addLayout(config_layout)
-
         # Motor Control Area
         self.motor_control_layout = QGridLayout()
         self.motor_checkboxes = []
@@ -132,7 +113,7 @@ class MotorControlGUI(QMainWindow):
         self.graph = PlotWidget()
         self.graph.setLabel('left', 'Position')
         self.graph.setLabel('bottom', 'Motor')
-        self.graph.setYRange(0,20)
+        self.graph.setYRange(0, 20)
         self.graph.setXRange(0, 10)  # Default initial range
         self.graph.setMouseEnabled(x=False, y=False)
         main_layout.addWidget(self.graph)
@@ -162,42 +143,6 @@ class MotorControlGUI(QMainWindow):
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
 
-    def set_arduino_configuration(self):
-        """Prompt the user to input the number of motors for each Arduino."""
-        try:
-            num_arduinos = self.arduino_count_input.value()
-            self.arduino_configs = []
-
-            for i in range(1, num_arduinos + 1):
-                motors_count, ok = self.get_integer_input(f"Number of Motors for Arduino {i}")
-                if not ok:
-                    QMessageBox.warning(self, "Error", f"Invalid input for Arduino {i}. Please try again.")
-                    return
-                self.arduino_configs.append(motors_count)
-
-            self.generate_motors()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {str(e)}")
-
-    def generate_motors(self):
-        """Generate motors dynamically based on Arduino configuration."""
-        self.controller.motors.clear()
-        motor_count = 0
-
-        for i, motor_count in enumerate(self.arduino_configs, start=1):
-            for j in range(1, motor_count + 1):
-                motor_name = f"Arduino {i} Motor {j}"
-                self.controller.add_motor(motor_name, f"COM{i}", "X")
-
-        self.update_motor_controls()
-        self.auto_distribute_positions()
-        self.update_graph()
-
-    def get_integer_input(self, message):
-        """Helper to get integer input via dialog."""
-        num, ok = QInputDialog.getInt(self, "Input Required", message, min=1, max=10)
-        return num, ok
-
     def update_motor_controls(self):
         """Update the motor controls UI."""
         for i in reversed(range(self.motor_control_layout.count())):
@@ -216,10 +161,10 @@ class MotorControlGUI(QMainWindow):
             self.motor_inputs.append(input_box)
             self.motor_control_layout.addWidget(input_box, i, 1)
 
-    def auto_distribute_positions(self):
-        """Distribute motor positions evenly if not set manually."""
-        num_motors = len(self.controller.motors)
-        self.motor_positions = list(range(1, num_motors + 1))
+    def add_motor(self, name, axis):
+        """Add a motor manually."""
+        self.controller.add_motor(name, axis)
+        self.update_motor_controls()
 
     def move_selected_motors(self):
         """Move selected motors."""
@@ -270,16 +215,21 @@ class MotorControlGUI(QMainWindow):
         """Update the graph to show motor positions."""
         positions = [motor.current_position for motor in self.controller.motors]
         self.graph.clear()
-        self.graph.plot(self.motor_positions, positions, pen="g", name="Motor Positions", symbol='o')
+        self.graph.plot(range(len(self.controller.motors)), positions, pen="g", name="Motor Positions", symbol='o')
 
         x_axis = self.graph.getAxis('bottom')
         x_axis.setTicks([[(i, motor.name) for i, motor in enumerate(self.controller.motors)]])
-        self.graph.setXRange(0, max(len(self.controller.motors), 10))
 
 
 # Main Function
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     gui = MotorControlGUI()
+
+    # Example motors to add
+    gui.add_motor("Motor 1", "X")
+    gui.add_motor("Motor 2", "Y")
+    gui.add_motor("Motor 3", "Z")
+
     gui.show()
     sys.exit(app.exec_())
