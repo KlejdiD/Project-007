@@ -2,44 +2,40 @@ import sys
 import serial.tools.list_ports
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QSpinBox, QPushButton, QComboBox, QMessageBox, QFrame, QLineEdit, QCheckBox
+    QLabel, QSpinBox, QPushButton, QComboBox, QMessageBox, QFrame, QCheckBox
 )
 from PyQt5.QtCore import Qt
 import time
 import subprocess
 import os
+import pyqtgraph as pg
 
 
 class Motor:
-    """Represents a single motor and its operations."""
     def __init__(self, name, port, axis):
         self.name = name
         self.port = port
         self.axis = axis
-        self.arduino = None
-
-    def connect(self):
-        if self.arduino is None or not self.arduino.is_open:
-            self.arduino = serial.Serial(self.port, 115200)
-            time.sleep(2)
-
-    def disconnect(self):
-        if self.arduino and self.arduino.is_open:
-            self.arduino.close()
-
-    def send_command(self, command):
-        self.connect()
-        self.arduino.write(str.encode(f"{command}") + b'\n')
-        time.sleep(0.1)
+        self.current_position = 0  # Add this attribute to store the current position
+        self.target_position = 0  # Target position (can be used for movement logic)
 
     def move(self, steps):
-        self.send_command(f"G0{self.axis}{steps}")
+        """Move the motor by the specified number of steps."""
+        self.current_position += steps
 
     def set_home(self):
-        self.send_command(f"G92{self.axis}0")
+        """Set the motor to the home position."""
+        self.current_position = 0
 
-    def home(self):
-        self.send_command(f"G0{self.axis}0")
+    def save_position(self):
+        """Save the current position."""
+        # You could save the position to a file or database here, if needed.
+        pass
+
+    def update_position(self):
+        """Update the motor position (if necessary)."""
+        # This could be used to simulate position updates from a controller or external system.
+        pass
 
 
 class ArduinoConfigurator(QMainWindow):
@@ -108,14 +104,12 @@ class ArduinoConfigurator(QMainWindow):
 
     def clear_arduino_widgets(self):
         """Completely clears the Arduino configuration area, removing all widgets and resetting the layout."""
-        # Remove all widgets from the arduino_layout
         while self.arduino_layout.count() > 0:
             item = self.arduino_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
 
-        # Clear the tracking list
         self.arduino_widgets.clear()
 
     def update_arduino_inputs(self):
@@ -142,16 +136,13 @@ class ArduinoConfigurator(QMainWindow):
         return [port.device for port in serial.tools.list_ports.comports()]
 
     def open_motor_config(self):
-        # Simulate assigned COM ports for testing if no real ports are available
-        self.arduino_configs = []
-
         # Check if any valid COM port is assigned
+        self.arduino_configs = []
         for label, combo_box in self.arduino_widgets:
             selected_port = combo_box.currentText()
             if selected_port != "Not Assigned":
                 self.arduino_configs.append(selected_port)
 
-        # If no COM ports are assigned, simulate dummy ports for testing
         if not self.arduino_configs:
             QMessageBox.warning(self, "Warning", "No Arduinos assigned! Using mock data for testing.")
             self.arduino_configs = ["COM_TEST_1", "COM_TEST_2"]
@@ -168,45 +159,10 @@ class MotorConfigurator(QMainWindow):
         self.setWindowTitle("Motor Configurator")
         self.setGeometry(300, 150, 800, 600)
 
-        self.arduino_configs = arduino_configs  # List of assigned COM ports
-        self.selected_motors = {}  # To store motor selection (e.g., {"COM1": ["X", "Y"]})
+        self.arduino_configs = arduino_configs
+        self.selected_motors = {}
 
         self.init_ui()
-    
-
-    def run_new_script(self):
-        """Runs the new Python script when the 'Set Configuration' button is clicked."""
-        try:
-            # Get the current directory of the running script
-            current_directory = os.path.dirname(os.path.abspath(__file__))
-            script_name = "graphicalInterface.py"
-            script_path = os.path.join(current_directory, script_name)
-
-            # Print the path for debugging
-            print(f"Attempting to run script at: {script_path}")
-
-            # Check if the script exists
-            if not os.path.exists(script_path):
-                raise FileNotFoundError(f"The script '{script_name}' does not exist in the current directory.")
-            
-            # Use the Python executable used for the current program
-            python_executable = sys.executable  # This ensures we use the correct environment
-
-            # Start the new script as a subprocess (don't wait for it to finish)
-            subprocess.Popen([python_executable, script_path])
-
-            # Exit the current application immediately
-            QApplication.quit()
-            sys.exit()  # Force the application to close immediately
-
-        except subprocess.CalledProcessError as e:
-            print(f"An error occurred while running the script: {e.stderr}")
-        except FileNotFoundError as fnf_error:
-            print(fnf_error)
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-
 
     def init_ui(self):
         self.central_widget = QWidget(self)
@@ -220,27 +176,23 @@ class MotorConfigurator(QMainWindow):
             group_frame.setStyleSheet("border: 1px solid #ccc; background-color: #e9f7ff; margin-bottom: 10px;")
             group_layout = QVBoxLayout(group_frame)
 
-            # Arduino Label
             label = QLabel(f"Arduino ({port}):")
             label.setStyleSheet("font-weight: bold;")
             group_layout.addWidget(label)
 
-            # Checkboxes for each motor
             motor_checkboxes = {}
             for axis in ["X", "Y", "Z"]:
                 checkbox = QCheckBox(f"Motor ({axis})")
                 motor_checkboxes[axis] = checkbox
                 group_layout.addWidget(checkbox)
 
-            # Save motor checkboxes for this Arduino
             self.selected_motors[port] = motor_checkboxes
-
             self.main_layout.addWidget(group_frame)
 
         # Set Configuration Button
         self.button_layout = QHBoxLayout()
         self.set_config_button = QPushButton("Set Configuration")
-        self.set_config_button.clicked.connect(self.run_new_script)
+        self.set_config_button.clicked.connect(self.run_graph)
         self.set_config_button.setStyleSheet("font-size: 14px; padding: 10px;")
         self.button_layout.addStretch()
         self.button_layout.addWidget(self.set_config_button)
@@ -248,6 +200,90 @@ class MotorConfigurator(QMainWindow):
 
         self.main_layout.addLayout(self.button_layout)
 
+    def run_graph(self):
+            # Extract motor selection and open the graph window
+            motors_to_display = self.get_selected_motors()
+
+            # Open Graph Window
+            self.graph_window = MotorGraphWindow(motors_to_display)
+            self.graph_window.show()
+            self.close()
+
+    def get_selected_motors(self):
+        selected_motors = []
+        for port, motor_checkboxes in self.selected_motors.items():
+            for axis, checkbox in motor_checkboxes.items():
+                if checkbox.isChecked():
+                    selected_motors.append(Motor(f"{axis} Motor", port, axis))
+        return selected_motors
+
+class MotorGraphWindow(QMainWindow):
+    def __init__(self, motors_to_display):
+        super().__init__()
+        self.setWindowTitle("Motor Graph")
+        self.setGeometry(300, 150, 800, 600)
+
+        self.motors = motors_to_display  # Store the motors to be displayed
+        self.init_ui()
+
+    def init_ui(self):
+        self.central_widget = QWidget(self)
+        self.setCentralWidget(self.central_widget)
+
+        self.main_layout = QVBoxLayout(self.central_widget)
+
+        # Create the plot widget
+        self.graph_widget = pg.PlotWidget()
+        self.graph_widget.setMouseEnabled(False)  # Lock movement of the graph
+        self.graph_widget.setYRange(0, 40, padding=0)  # Lock Y-axis to a fixed range
+        self.graph_widget.setXRange(0, 80, padding=0)  # Lock X-axis to show a 40-unit window
+        self.main_layout.addWidget(self.graph_widget)
+
+        # Initialize a plot for each motor with a specific color
+        self.motor_plots = {}
+        for motor in self.motors:
+            # Create a plot for each motor and assign a color (e.g., red for all)
+            pen_color = (255, 0, 0)  # Red color by default
+            plot = self.graph_widget.plot(pen=pg.mkPen(color=pen_color))  
+            self.motor_plots[motor.name] = plot
+
+        # Timer to update motor positions every 500ms
+        self.timer = pg.QtCore.QTimer(self)
+        self.timer.timeout.connect(self.update_graph)
+        self.timer.start(500)
+
+        # Buttons for motor control
+        button_layout = QHBoxLayout()
+
+        move_button = QPushButton("Move Motors")
+        move_button.clicked.connect(self.move_selected_motors)
+        button_layout.addWidget(move_button)
+
+        home_button = QPushButton("Set Motors Home")
+        home_button.clicked.connect(self.home_selected_motors)
+        button_layout.addWidget(home_button)
+
+        self.main_layout.addLayout(button_layout)
+
+    def update_graph(self):
+        """Update the graph with the current motor positions."""
+        for motor in self.motors:
+            self.motor_plots[motor.name].setData([motor.current_position])
+
+    def move_selected_motors(self):
+        """Move selected motors."""
+        for motor in self.motors:
+            motor.move(5)  # Example move of 5 steps
+            motor.update_position()  # Update the motor position
+        self.update_graph()
+
+    def home_selected_motors(self):
+        """Set selected motors to home position."""
+        for motor in self.motors:
+            motor.set_home()  # Set the motor to home
+        self.update_graph()
+
+# Main Function
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
