@@ -10,6 +10,8 @@ import subprocess
 import os
 import pyqtgraph as pg
 
+from graphicalInterface import MotorControlGUI
+
 
 class Motor:
     def __init__(self, name, port, axis):
@@ -140,12 +142,12 @@ class ArduinoConfigurator(QMainWindow):
         self.arduino_configs = []
         for label, combo_box in self.arduino_widgets:
             selected_port = combo_box.currentText()
-            if selected_port != "Not Assigned":
-                self.arduino_configs.append(selected_port)
+            # if selected_port != "Not Assigned":
+            self.arduino_configs.append(selected_port)
 
-        if not self.arduino_configs:
-            QMessageBox.warning(self, "Warning", "No Arduinos assigned! Using mock data for testing.")
-            self.arduino_configs = ["COM_TEST_1", "COM_TEST_2"]
+        # if not self.arduino_configs:
+        #     QMessageBox.warning(self, "Warning", "No Arduinos assigned! Using mock data for testing.")
+        #     self.arduino_configs = ["COM_TEST_1", "COM_TEST_2"]
 
         # Open Motor Config Window
         self.motor_config_window = MotorConfigurator(self.arduino_configs)
@@ -171,12 +173,14 @@ class MotorConfigurator(QMainWindow):
         self.main_layout = QVBoxLayout(self.central_widget)
 
         # Display each Arduino with checkboxes for motors
-        for port in self.arduino_configs:
+        for index, port in enumerate(self.arduino_configs, 1):  # Start enumeration from 1
             group_frame = QFrame(self)
             group_frame.setStyleSheet("border: 1px solid #ccc; background-color: #e9f7ff; margin-bottom: 10px;")
             group_layout = QVBoxLayout(group_frame)
 
-            label = QLabel(f"Arduino ({port}):")
+            # If the port is not assigned, use a logical Arduino name
+            port_label = f"Arduino {index} ({port})"
+            label = QLabel(port_label)  # Show Arduino number and port (if available)
             label.setStyleSheet("font-weight: bold;")
             group_layout.addWidget(label)
 
@@ -186,7 +190,8 @@ class MotorConfigurator(QMainWindow):
                 motor_checkboxes[axis] = checkbox
                 group_layout.addWidget(checkbox)
 
-            self.selected_motors[port] = motor_checkboxes
+            # Use logical Arduino ID for motor grouping
+            self.selected_motors[port_label] = motor_checkboxes
             self.main_layout.addWidget(group_frame)
 
         # Set Configuration Button
@@ -211,76 +216,58 @@ class MotorConfigurator(QMainWindow):
 
     def get_selected_motors(self):
         selected_motors = []
-        for port, motor_checkboxes in self.selected_motors.items():
+        for i, (port, motor_checkboxes) in enumerate(self.selected_motors.items()):
+            arduino_label = f"Arduino {i + 1}"  # Add Arduino label
             for axis, checkbox in motor_checkboxes.items():
                 if checkbox.isChecked():
-                    selected_motors.append(Motor(f"{axis} Motor", port, axis))
+                    motor_name = f"{arduino_label} - Motor {axis}"  # Group by Arduino
+                    selected_motors.append(Motor(motor_name, port, axis))
         return selected_motors
 
-class MotorGraphWindow(QMainWindow):
+
+class MotorGraphWindow(MotorControlGUI):
     def __init__(self, motors_to_display):
         super().__init__()
         self.setWindowTitle("Motor Graph")
-        self.setGeometry(300, 150, 800, 600)
+        self.setGeometry(300, 150, 1200, 800)
+        
+        # Clear existing motors in MotorControlGUI
+        self.controller.motors = []
 
-        self.motors = motors_to_display  # Store the motors to be displayed
-        self.init_ui()
+        # Add only the selected motors to the controller
+        for motor in motors_to_display:
+            self.add_motor(motor.name, motor.axis)
 
-    def init_ui(self):
-        self.central_widget = QWidget(self)
-        self.setCentralWidget(self.central_widget)
+        # Update the UI to reflect the new set of motors
+        self.update_motor_controls()
+        self.update_graph()
 
-        self.main_layout = QVBoxLayout(self.central_widget)
+    def update_motor_positions(self):
+        """Override to update only the passed motors."""
+        for motor in self.controller.motors:
+            motor.update_position()
 
-        # Create the plot widget
-        self.graph_widget = pg.PlotWidget()
-        self.graph_widget.setMouseEnabled(False)  # Lock movement of the graph
-        self.graph_widget.setYRange(0, 40, padding=0)  # Lock Y-axis to a fixed range
-        self.graph_widget.setXRange(0, 80, padding=0)  # Lock X-axis to show a 40-unit window
-        self.main_layout.addWidget(self.graph_widget)
-
-        # Initialize a plot for each motor with a specific color
-        self.motor_plots = {}
-        for motor in self.motors:
-            # Create a plot for each motor and assign a color (e.g., red for all)
-            pen_color = (255, 0, 0)  # Red color by default
-            plot = self.graph_widget.plot(pen=pg.mkPen(color=pen_color))  
-            self.motor_plots[motor.name] = plot
-
-        # Timer to update motor positions every 500ms
-        self.timer = pg.QtCore.QTimer(self)
-        self.timer.timeout.connect(self.update_graph)
-        self.timer.start(500)
-
-        # Buttons for motor control
-        button_layout = QHBoxLayout()
-
-        move_button = QPushButton("Move Motors")
-        move_button.clicked.connect(self.move_selected_motors)
-        button_layout.addWidget(move_button)
-
-        home_button = QPushButton("Set Motors Home")
-        home_button.clicked.connect(self.home_selected_motors)
-        button_layout.addWidget(home_button)
-
-        self.main_layout.addLayout(button_layout)
-
-    def update_graph(self):
-        """Update the graph with the current motor positions."""
-        for motor in self.motors:
-            self.motor_plots[motor.name].setData([motor.current_position])
-
-    def move_selected_motors(self):
-        """Move selected motors."""
-        for motor in self.motors:
-            motor.move(5)  # Example move of 5 steps
-            motor.update_position()  # Update the motor position
         self.update_graph()
 
     def home_selected_motors(self):
-        """Set selected motors to home position."""
-        for motor in self.motors:
-            motor.set_home()  # Set the motor to home
+        """Override to reset home for selected motors."""
+        for checkbox, motor in zip(self.motor_checkboxes, self.controller.motors):
+            if checkbox.isChecked():
+                motor.set_home()
+        self.update_graph()
+
+    def move_selected_motors(self):
+        """Override to move only the selected motors."""
+        motor_steps = {}
+        for checkbox, input_box, motor in zip(self.motor_checkboxes, self.motor_inputs, self.controller.motors):
+            if checkbox.isChecked():
+                try:
+                    steps = int(input_box.text())
+                    motor_steps[motor.name] = steps
+                except ValueError:
+                    pass  # Ignore invalid inputs
+
+        self.controller.move_multiple_motors(motor_steps)
         self.update_graph()
 
 # Main Function

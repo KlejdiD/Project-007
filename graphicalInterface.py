@@ -212,24 +212,20 @@ class MotorControlGUI(QMainWindow):
         self.update_graph()
 
     def update_graph(self):
-        """Update the graph to show motor positions."""
-        positions = [motor.current_position for motor in self.controller.motors]
-        self.graph.clear()
-        self.graph.plot(range(len(self.controller.motors)), positions, pen="g", name="Motor Positions", symbol='o')
+         """Update the graph to show motor positions."""
+         positions = [motor.current_position for motor in self.controller.motors]
+         self.graph.clear()  # Clear the previous plot
+         self.graph.plot(range(len(self.controller.motors)), positions, pen="g", name="Motor Positions", symbol='o')
 
-        x_axis = self.graph.getAxis('bottom')
-        x_axis.setTicks([[(i, motor.name) for i, motor in enumerate(self.controller.motors)]])
+         x_axis = self.graph.getAxis('bottom')
+         x_axis.setTicks([[(i, motor.name) for i, motor in enumerate(self.controller.motors)]])
+
 
 
 # Main Function
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     gui = MotorControlGUI()
-
-    # Example motors to add
-    gui.add_motor("Motor 1", "X")
-    gui.add_motor("Motor 2", "Y")
-    gui.add_motor("Motor 3", "Z")
 
     gui.show()
     sys.exit(app.exec_())
