@@ -6,19 +6,76 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from pyqtgraph import PlotWidget
 import os
+import serial
+import time
 
 class Motor:
     """Represents a single motor and its operations."""
-    def __init__(self, name, axis, position_file="motor_positions.json"):
+    def __init__(self, name, axis, port, position_file="motor_positions.json"):
         self.name = name
         self.axis = axis
+        self.port = port
         self.current_position = 0
         self.max_position = 40  # Maximum position limit
         self.target_position = 0
         self.is_moving = False
         self.position_file = position_file
 
+
+        
+        
+
         self.load_position()
+
+    def connect(self):
+        """Open a serial connection to the motor."""
+        if self.arduino is None or not self.arduino.is_open:
+            self.arduino = serial.Serial(self.port, 115200)
+            time.sleep(2)  # Allow time for the connection to initialize
+
+    def disconnect(self):
+        """Close the serial connection."""
+        if self.arduino and self.arduino.is_open:
+            self.arduino.close()
+
+    def send_command(self, command):
+        """Send a raw command to the motor."""
+        self.connect()
+        self.arduino.write(str.encode("\r\n\r\n"))  # GRBL wake-up sequence
+        self.arduino.write(str.encode(f"{command}") + b'\n')
+        time.sleep(0.1)  # Allow time for the command to process
+
+
+    def move(self, steps):
+        """Move the motor by the specified number of steps."""
+        command_set_system = "$J=G21G90"
+        move_command = f"G0{self.axis}{steps}"
+        self.send_command(command_set_system)
+        self.send_command(move_command)
+        return print( f"{self.name} has moved {steps}")
+
+    def set_home(self):
+        """Set the current position of the motor as home."""
+        command_set_system = "$J=G21G90"
+        command_set_home = f"G92{self.axis}0"
+        self.send_command(command_set_system)
+        self.send_command(command_set_home)
+        return print("Home set")
+
+    def home(self):
+        """Move the motor to its home position."""
+        command_set_system = "$J=G21G90"
+        command_move_home = f"G0{self.axis}0"
+        self.send_command(command_set_system)
+        self.send_command(command_move_home)
+        return print(f"{self.name} moved home")
+
+    def __del__(self):
+        """Ensure the connection is closed when the object is deleted."""
+        self.disconnect()
+        return print(f"disconnected {self.name}")
+
+    
 
     def move(self, steps):
         """Simulate moving the motor."""
@@ -69,12 +126,46 @@ class Motor:
                         print(f"{self.name} position loaded: {self.current_position}")
 
 class MotorController:
+    
+
+    """Manages multiple motors."""
+    def __init__(self, motors_config):
+        self.motors = [Motor(m["name"], m["port"], m["axis"]) for m in motors_config]
+
+    def get_motor(self, motor_name):
+        """Retrieve a motor by its name."""
+        return next((motor for motor in self.motors if motor.name == motor_name), None)
+
+    def move_motor(self, motor_name, steps):
+        """Move a specific motor by name."""
+        motor = self.get_motor(motor_name)
+        if motor:
+            return motor.move(steps)
+        else:
+            return f"Error: Motor {motor_name} not found."
+
+    def home_motor(self, motor_name):
+        """Home a specific motor by name."""
+        motor = self.get_motor(motor_name)
+        if motor:
+            return motor.home()
+        else:
+            return f"Error: Motor {motor_name} not found."
+
+    def set_motor_home(self, motor_name):
+        """Set the home position for a specific motor."""
+        motor = self.get_motor(motor_name)
+        if motor:
+            return motor.set_home()
+        else:
+            return f"Error: Motor {motor_name} not found."
+            
     """Manages multiple motors."""
     def __init__(self):
         self.motors = []
 
-    def add_motor(self, name, axis):
-        motor = Motor(name, axis)
+    def add_motor(self, name, axis, port):
+        motor = Motor(name, axis, port)
         self.motors.append(motor)
 
     def move_multiple_motors(self, motor_steps):
@@ -85,6 +176,7 @@ class MotorController:
                 motor.move(steps)
 
 class MotorControlGUI(QMainWindow):
+
     def __init__(self):
         super().__init__()
         self.controller = MotorController()
@@ -94,6 +186,7 @@ class MotorControlGUI(QMainWindow):
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.update_motor_positions)
         self.update_timer.start(100)  # Update every 100ms
+
 
     def initUI(self):
         self.setWindowTitle("Motor Control GUI")
@@ -161,9 +254,9 @@ class MotorControlGUI(QMainWindow):
             self.motor_inputs.append(input_box)
             self.motor_control_layout.addWidget(input_box, i, 1)
 
-    def add_motor(self, name, axis):
+    def add_motor(self, name, axis, port):
         """Add a motor manually."""
-        self.controller.add_motor(name, axis)
+        self.controller.add_motor(name, axis, port)
         self.update_motor_controls()
 
     def move_selected_motors(self):
@@ -224,6 +317,18 @@ class MotorControlGUI(QMainWindow):
 
 # Main Function
 if __name__ == "__main__":
+
+    motors_config= []
+
+    for motor in self.controller:
+            motors_config.append({
+                "name": motor.name,
+                "axis": motor.axis,
+                "port": motor.port
+            })
+
+    controller = MotorController(motors)
+
     app = QApplication(sys.argv)
     gui = MotorControlGUI()
 

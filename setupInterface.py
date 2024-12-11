@@ -208,11 +208,14 @@ class MotorConfigurator(QMainWindow):
     def run_graph(self):
             # Extract motor selection and open the graph window
             motors_to_display = self.get_selected_motors()
+            
 
             # Open Graph Window
             self.graph_window = MotorGraphWindow(motors_to_display)
             self.graph_window.show()
             self.close()
+
+   
 
     def get_selected_motors(self):
         selected_motors = []
@@ -236,7 +239,18 @@ class MotorGraphWindow(MotorControlGUI):
 
         # Add only the selected motors to the controller
         for motor in motors_to_display:
-            self.add_motor(motor.name, motor.axis)
+            self.add_motor(motor.name, motor.axis, motor.port)
+
+        motors_config= []
+
+        for motor in motors_to_display:
+            motors_config.append({
+                "name": motor.name,
+                "axis": motor.axis,
+                "port": motor.port
+            })
+            
+
 
         # Update the UI to reflect the new set of motors
         self.update_motor_controls()
@@ -273,6 +287,9 @@ class MotorGraphWindow(MotorControlGUI):
 # Main Function
 
 if __name__ == "__main__":
+
+    
+
     app = QApplication(sys.argv)
     configurator = ArduinoConfigurator()
     configurator.show()
