@@ -2,13 +2,14 @@ import sys
 import serial.tools.list_ports
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QSpinBox, QPushButton, QComboBox, QMessageBox, QFrame, QCheckBox
+    QLabel, QSpinBox, QPushButton, QComboBox, QMessageBox, QFrame, QLineEdit, QCheckBox
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtChart import QChart, QChartView, QLineSeries
-from PyQt5.QtGui import QPainter
 import time
 import serial
+from pyqtgraph import PlotWidget
+from pyqtgraph import TextItem
+
 
 class Motor:
     """Represents a single motor and its operations."""
@@ -16,8 +17,8 @@ class Motor:
         self.name = name
         self.port = port
         self.axis = axis
-        self.steps = 0  # Initial step position
         self.arduino = None
+        self.current_position = 0
 
     def connect(self):
         if self.arduino is None or not self.arduino.is_open:
@@ -34,15 +35,11 @@ class Motor:
         time.sleep(0.1)
 
     def move(self, steps):
-        self.steps += steps  # Update steps
-        self.send_command(f"G0{self.axis}{steps}")  # Send command to motor
+        self.send_command(f"G0{self.axis}{steps}")
+        self.current_position += steps
 
     def set_home(self):
-        self.steps = 0
         self.send_command(f"G92{self.axis}0")
-
-    def home(self):
-        self.send_command(f"G0{self.axis}0")
 
 
 class ArduinoConfigurator(QMainWindow):
@@ -71,7 +68,7 @@ class ArduinoConfigurator(QMainWindow):
 
         self.num_arduinos_label = QLabel("Number of Arduinos:")
         self.num_arduinos_spinner = QSpinBox()
-        self.num_arduinos_spinner.setMinimum(0)
+        self.num_arduinos_spinner.setMinimum(1)
         self.num_arduinos_spinner.setMaximum(10)
 
         self.top_row_layout.addWidget(self.num_arduinos_label)
@@ -110,6 +107,7 @@ class ArduinoConfigurator(QMainWindow):
             self.update_arduino_inputs()
 
     def clear_arduino_widgets(self):
+        """Completely clears the Arduino configuration area, removing all widgets and resetting the layout."""
         while self.arduino_layout.count() > 0:
             item = self.arduino_layout.takeAt(0)
             widget = item.widget()
@@ -153,6 +151,7 @@ class ArduinoConfigurator(QMainWindow):
             QMessageBox.warning(self, "Warning", "No Arduinos assigned! Using mock data for testing.")
             self.arduino_configs = ["COM_TEST_1", "COM_TEST_2"]
 
+        # Open Motor Config Window
         self.motor_config_window = MotorConfigurator(self.arduino_configs)
         self.motor_config_window.show()
         self.close()
@@ -166,8 +165,7 @@ class MotorConfigurator(QMainWindow):
 
         self.arduino_configs = arduino_configs
         self.selected_motors = {}
-        self.motor_objects = {}  # To store Motor instances
-        self.graph_data = {}
+        self.motor_positions = []
         self.init_ui()
 
     def init_ui(self):
@@ -176,7 +174,7 @@ class MotorConfigurator(QMainWindow):
 
         self.main_layout = QVBoxLayout(self.central_widget)
 
-        # Create motor configuration interface
+        # Display each Arduino with checkboxes for motors
         for port in self.arduino_configs:
             group_frame = QFrame(self)
             group_frame.setStyleSheet("border: 1px solid #ccc; background-color: #e9f7ff; margin-bottom: 10px;")
@@ -193,58 +191,106 @@ class MotorConfigurator(QMainWindow):
                 group_layout.addWidget(checkbox)
 
             self.selected_motors[port] = motor_checkboxes
+
             self.main_layout.addWidget(group_frame)
 
-        # Input for steps to move motors
-        self.step_input = QSpinBox()
-        self.step_input.setMinimum(-40)
-        self.step_input.setMaximum(40)
-        self.step_input.setValue(0)  # Default to 0
-        self.main_layout.addWidget(QLabel("Input steps for motor movement:"))
-        self.main_layout.addWidget(self.step_input)
+        # Set Configuration Button
+        self.button_layout = QHBoxLayout()
+        self.set_config_button = QPushButton("Set Motors and Graph")
+        self.set_config_button.clicked.connect(self.set_motor_configuration)
+        self.button_layout.addStretch()
+        self.button_layout.addWidget(self.set_config_button)
+        self.button_layout.addStretch()
 
-        # Move Motors Button
-        self.move_button = QPushButton("Move Motors")
-        self.move_button.clicked.connect(self.move_motors)
-        self.main_layout.addWidget(self.move_button)
+        self.main_layout.addLayout(self.button_layout)
 
-        # Create Graph to visualize motor movements
-        self.chart = QChart()
-        self.chart_view = QChartView(self.chart)
-        self.chart_view.setRenderHint(QPainter.Antialiasing)
-        self.main_layout.addWidget(self.chart_view)
-
-    def move_motors(self):
-        steps = self.step_input.value()
-
+    def set_motor_configuration(self):
+        # Initialize motors based on selection
+        self.motors = []
         for port, motor_checkboxes in self.selected_motors.items():
             for axis, checkbox in motor_checkboxes.items():
                 if checkbox.isChecked():
-                    motor_name = f"Motor {axis} ({port})"
-                    if motor_name not in self.motor_objects:
-                        self.motor_objects[motor_name] = Motor(motor_name, port, axis)
+                    motor = Motor(f"{port} - {axis}", port, axis)
+                    self.motors.append(motor)
 
-                    motor = self.motor_objects[motor_name]
-                    motor.move(steps)
-                    self.update_graph(motor)
+        # Show the graph
+        self.graph_window = MotorGraph(self.motors)
+        self.graph_window.show()
+        self.close()
 
-    def update_graph(self, motor):
-        if motor.name not in self.graph_data:
-            self.graph_data[motor.name] = []
 
-        # Add new data for graph visualization
-        self.graph_data[motor.name].append(motor.steps)
+class MotorGraph(QMainWindow):
+    def __init__(self, motors):
+        super().__init__()
+        self.setWindowTitle("Motor Positions Graph")
+        self.setGeometry(300, 150, 800, 600)
 
-        # Create series for each motor
-        series = QLineSeries()
-        for i, step in enumerate(self.graph_data[motor.name]):
-            series.append(i, step)
+        self.motors = motors
+        self.motor_positions = {motor.name: motor.current_position for motor in self.motors}
+        self.init_ui()
 
-        self.chart.addSeries(series)
-        self.chart.createDefaultAxes()
-        self.chart.setTitle(f"Motor Movement: {motor.name}")
+    def init_ui(self):
+        self.central_widget = QWidget(self)
+        self.setCentralWidget(self.central_widget)
 
-        self.chart_view.repaint()
+        self.main_layout = QVBoxLayout(self.central_widget)
+
+        # Create graph
+        self.graph = PlotWidget()
+        self.graph.setLabel('left', 'Position')
+        self.graph.setLabel('bottom', 'Motor')
+        self.graph.setYRange(0, 100)
+        self.graph.setXRange(0, len(self.motors) + 1)
+        self.main_layout.addWidget(self.graph)
+
+        # Input for steps to move motors
+        self.steps_label = QLabel("Enter number of steps for motors:")
+        self.steps_input = QLineEdit(self)
+        self.steps_input.setPlaceholderText("Enter steps, comma separated")
+        self.move_button = QPushButton("Move Motors")
+        self.move_button.clicked.connect(self.move_motors)
+
+        self.main_layout.addWidget(self.steps_label)
+        self.main_layout.addWidget(self.steps_input)
+        self.main_layout.addWidget(self.move_button)
+
+        # Display the initial graph
+        self.update_graph()
+
+    def move_motors(self):
+        steps_input = self.steps_input.text()
+        try:
+            steps = list(map(int, steps_input.split(",")))
+            if len(steps) != len(self.motors):
+                QMessageBox.warning(self, "Error", "Number of steps does not match number of motors.")
+                return
+            for motor, step in zip(self.motors, steps):
+                motor.move(step)
+
+            self.update_graph()
+        except ValueError:
+            QMessageBox.warning(self, "Error", "Invalid steps input. Please enter valid integers.")
+
+    def update_graph(self):
+        motor_names = [motor.name for motor in self.motors]
+        motor_positions = [motor.current_position for motor in self.motors]
+
+        # Generate numeric x-values for the plot
+        motor_indices = list(range(len(self.motors)))
+
+        self.graph.clear()
+
+        # Plot the motor positions
+        self.graph.plot(motor_indices, motor_positions, pen="g", symbol='o')
+
+        # Add labels to the graph using TextItem
+        plot_item = self.graph.getPlotItem()  # Access the PlotItem from PlotWidget
+        for i, name in enumerate(motor_names):
+            # Create TextItem
+            text = TextItem(name, anchor=(0.5, 0.5))
+            text.setPos(motor_indices[i], motor_positions[i])
+            text.setColor("black")
+            plot_item.addItem(text)
 
 
 if __name__ == "__main__":
