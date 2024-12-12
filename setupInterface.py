@@ -66,7 +66,7 @@ class ArduinoConfigurator(QMainWindow):
 
         self.num_arduinos_label = QLabel("Number of Arduinos:")
         self.num_arduinos_spinner = QSpinBox()
-        self.num_arduinos_spinner.setMinimum(0)
+        self.num_arduinos_spinner.setMinimum(1)
         self.num_arduinos_spinner.setMaximum(10)
 
         self.top_row_layout.addWidget(self.num_arduinos_label)
@@ -155,6 +155,9 @@ class ArduinoConfigurator(QMainWindow):
         self.close()
 
 
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QFrame, QCheckBox, QLabel, QPushButton, QScrollArea, QWidget
+from PyQt5.QtCore import Qt
+
 class MotorConfigurator(QMainWindow):
     def __init__(self, arduino_configs):
         super().__init__()
@@ -167,10 +170,20 @@ class MotorConfigurator(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
+        # Create central widget for the window
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
 
+        # Create main layout for central widget
         self.main_layout = QVBoxLayout(self.central_widget)
+
+        # Create a scroll area to allow scrolling when content overflows
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)  # Make the widget inside resizeable
+
+        # Create a widget to hold the motor controls inside the scroll area
+        scroll_content_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content_widget)
 
         # Display each Arduino with checkboxes for motors
         for index, port in enumerate(self.arduino_configs, 1):  # Start enumeration from 1
@@ -192,7 +205,11 @@ class MotorConfigurator(QMainWindow):
 
             # Use logical Arduino ID for motor grouping
             self.selected_motors[port_label] = motor_checkboxes
-            self.main_layout.addWidget(group_frame)
+            scroll_layout.addWidget(group_frame)
+
+        # Add scroll area containing motor control content
+        scroll_area.setWidget(scroll_content_widget)
+        self.main_layout.addWidget(scroll_area)
 
         # Set Configuration Button
         self.button_layout = QHBoxLayout()
@@ -203,16 +220,17 @@ class MotorConfigurator(QMainWindow):
         self.button_layout.addWidget(self.set_config_button)
         self.button_layout.addStretch()
 
+        # Add the button layout to the main layout
         self.main_layout.addLayout(self.button_layout)
 
     def run_graph(self):
-            # Extract motor selection and open the graph window
-            motors_to_display = self.get_selected_motors()
+        # Extract motor selection and open the graph window
+        motors_to_display = self.get_selected_motors()
 
-            # Open Graph Window
-            self.graph_window = MotorGraphWindow(motors_to_display)
-            self.graph_window.show()
-            self.close()
+        # Open Graph Window
+        self.graph_window = MotorGraphWindow(motors_to_display)
+        self.graph_window.show()
+        self.close()
 
     def get_selected_motors(self):
         selected_motors = []
@@ -256,8 +274,7 @@ class MotorGraphWindow(MotorControlGUI):
                 motor.set_home()
         self.update_graph()
 
-    def move_selected_motors(self):
-        """Override to move only the selected motors."""
+""" def move_selected_motors(self):
         motor_steps = {}
         for checkbox, input_box, motor in zip(self.motor_checkboxes, self.motor_inputs, self.controller.motors):
             if checkbox.isChecked():
@@ -268,7 +285,25 @@ class MotorGraphWindow(MotorControlGUI):
                     pass  # Ignore invalid inputs
 
         self.controller.move_multiple_motors(motor_steps)
-        self.update_graph()
+        self.update_graph()"""
+
+def move_selected_motors(self):
+    """Override to move only the selected motors."""
+    motor_steps = {}
+    for checkbox, input_box, motor in zip(self.motor_checkboxes, self.motor_inputs, self.controller.motors):
+        if checkbox.isChecked():
+            try:
+                steps = int(input_box.text())
+                if -40 <= steps <= 40:  # Validate the range
+                    motor_steps[motor.name] = steps
+                else:
+                    print(f"Input {steps} out of range for motor {motor.name}. Must be between -40 and 40.")
+            except ValueError:
+                print(f"Invalid input for motor {motor.name}. Must be an integer.")
+
+    self.controller.move_multiple_motors(motor_steps)
+    self.update_graph()
+
 
 # Main Function
 

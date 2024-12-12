@@ -93,7 +93,7 @@ class MotorControlGUI(QMainWindow):
 
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.update_motor_positions)
-        self.update_timer.start(100)  # Update every 100ms
+        self.update_timer.start(600)  # Update every 100ms
 
     def initUI(self):
         self.setWindowTitle("Motor Control GUI")
@@ -113,8 +113,8 @@ class MotorControlGUI(QMainWindow):
         self.graph = PlotWidget()
         self.graph.setLabel('left', 'Position')
         self.graph.setLabel('bottom', 'Motor')
-        self.graph.setYRange(0, 20)
-        self.graph.setXRange(0, 10)  # Default initial range
+        self.graph.setYRange(0, 60)
+        # self.graph.setXRange(0, 30)  # Default initial range
         self.graph.setMouseEnabled(x=False, y=False)
         main_layout.addWidget(self.graph)
 
