@@ -166,6 +166,9 @@ class MotorConfigurator(QMainWindow):
 
         self.init_ui()
 
+
+
+
     def init_ui(self):
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
@@ -194,6 +197,8 @@ class MotorConfigurator(QMainWindow):
             self.selected_motors[port_label] = motor_checkboxes
             self.main_layout.addWidget(group_frame)
 
+        
+
         # Set Configuration Button
         self.button_layout = QHBoxLayout()
         self.set_config_button = QPushButton("Set Configuration")
@@ -202,6 +207,14 @@ class MotorConfigurator(QMainWindow):
         self.button_layout.addStretch()
         self.button_layout.addWidget(self.set_config_button)
         self.button_layout.addStretch()
+
+        self.select_all_button = QPushButton("Select All")
+        self.select_all_button.clicked.connect(lambda: self.selectAll(select=True))  # Select all
+        self.deselect_all_button = QPushButton("Deselect All")
+        self.deselect_all_button.clicked.connect(lambda: self.selectAll(select=False))  # Deselect all
+
+        self.button_layout.addWidget(self.select_all_button)
+        self.button_layout.addWidget(self.deselect_all_button)
 
         self.main_layout.addLayout(self.button_layout)
 
@@ -226,6 +239,15 @@ class MotorConfigurator(QMainWindow):
                     motor_name = f"{arduino_label} - Motor {axis}"  # Group by Arduino
                     selected_motors.append(Motor(motor_name, port, axis))
         return selected_motors
+
+    def selectAll(self, select: bool = True):
+        """
+        Select or deselect all motor checkboxes.
+        :param select: Boolean indicating whether to select (True) or deselect (False) all checkboxes.
+        """
+        for _, motor_checkboxes in self.selected_motors.items():
+            for checkbox in motor_checkboxes.values():
+                checkbox.setChecked(select)
 
 
 class MotorGraphWindow(MotorControlGUI):
