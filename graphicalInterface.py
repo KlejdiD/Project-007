@@ -20,18 +20,22 @@ class Motor:
         self.target_position = 0
         self.is_moving = False
         self.position_file = position_file
+        self.arduino = None
 
 
-        
+        self.connect()
         
 
         self.load_position()
 
+
+
     def connect(self):
         """Open a serial connection to the motor."""
         if self.arduino is None or not self.arduino.is_open:
-            self.arduino = serial.Serial(self.port, 115200)
-            time.sleep(2)  # Allow time for the connection to initialize
+                self.arduino = serial.Serial(self.port, 115200)
+                time.sleep(2)  # Allow time for the connection to initialize
+                print("Connected!" + self.name + self.port)
 
     def disconnect(self):
         """Close the serial connection."""
@@ -61,6 +65,8 @@ class Motor:
         self.send_command(command_set_system)
         self.send_command(command_set_home)
         return print("Home set")
+
+
 
     def home(self):
         """Move the motor to its home position."""
@@ -194,6 +200,7 @@ class MotorControlGUI(QMainWindow):
 
         central_widget = QWidget()
         main_layout = QVBoxLayout()
+        
 
         # Motor Control Area
         self.motor_control_layout = QGridLayout()
