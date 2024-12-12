@@ -21,21 +21,13 @@ class Motor:
         self.is_moving = False
         self.position_file = position_file
         self.arduino = None
-
-
-        self.connect()
         
 
         self.load_position()
 
 
 
-    def connect(self):
-        """Open a serial connection to the motor."""
-        if self.arduino is None or not self.arduino.is_open:
-                self.arduino = serial.Serial(self.port, 115200)
-                time.sleep(2)  # Allow time for the connection to initialize
-                print("Connected!" + self.name + self.port)
+    
 
     def disconnect(self):
         """Close the serial connection."""
@@ -130,10 +122,10 @@ class Motor:
                         self.current_position = int(line.split(":")[1].strip())
                         self.target_position = self.current_position
                         print(f"{self.name} position loaded: {self.current_position}")
+    
 
 class MotorController:
     
-
     """Manages multiple motors."""
     def __init__(self, motors_config):
         self.motors = [Motor(m["name"], m["port"], m["axis"]) for m in motors_config]
@@ -193,6 +185,30 @@ class MotorControlGUI(QMainWindow):
         self.update_timer.timeout.connect(self.update_motor_positions)
         self.update_timer.start(100)  # Update every 100ms
 
+    def connectMotor(self):
+        print(self.controller.motors)
+        """Open a serial connection to the motor and show a pop-up for success or failure."""
+        for motor in self.controller.motors:
+            try:
+                if not hasattr(self, 'port') or not self.port:
+                    raise ValueError("Port is not set for the motor.")
+                
+                self.arduino = serial.Serial(self.port, 115200, timeout=1)
+                time.sleep(2)  # Allow time for the connection to initialize
+                QMessageBox.information(None, "Connection Successful", f"Connected to {self.name} on port {self.port}.")
+                print(f"Connected to {self.name} on port {self.port}.")
+            
+            except serial.SerialException as e:
+                QMessageBox.critical(None, "Connection Failed", f"Could not connect to {self.name} on port {self.port}.\nError: {e}")
+                print(f"SerialException: {e}")
+            
+            except ValueError as e:
+                QMessageBox.critical(None, "Configuration Error", str(e))
+                print(f"ValueError: {e}")
+            
+            except Exception as e:
+                QMessageBox.critical(None, "Unexpected Error", f"An unexpected error occurred.\nError: {e}")
+                print(f"Unexpected Error: {e}")
 
     def initUI(self):
         self.setWindowTitle("Motor Control GUI")
@@ -226,6 +242,11 @@ class MotorControlGUI(QMainWindow):
 
         home_button = QPushButton("Set Selected Motors Home")
         home_button.clicked.connect(self.home_selected_motors)
+
+        connect_button = QPushButton("Connect!")
+        connect_button.clicked.connect(self.connectMotor)
+        button_layout.addWidget(connect_button)
+
         button_layout.addWidget(home_button)
 
         main_layout.addLayout(button_layout)
